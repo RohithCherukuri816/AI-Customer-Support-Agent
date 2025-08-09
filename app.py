@@ -288,6 +288,7 @@ def main():
     st.title("AI Voice Cloning for Multilingual Localized Customer Support")
     st.caption("Open-source STT + NLP + TTS with voice cloning. No cloud APIs.")
 
+    # Sidebar settings
     with st.sidebar:
         st.header("Voice & Model Settings")
         uploaded_voice = st.file_uploader("Upload reference voice (WAV, ~5-10s)", type=["wav"])
@@ -295,51 +296,95 @@ def main():
         st.write("Using reference:", os.path.basename(speaker_wav_path) if speaker_wav_path else "None")
         st.markdown("- Supported languages: en, hi, es, ta, ar")
         realtime_hint = st.toggle("Low-latency mode (shorter recordings)", value=True)
+        stt_size = st.selectbox("STT model size", ["tiny", "base", "small", "medium"], index=2)
+        forced_lang_choice = st.selectbox("Force language (optional)", ["auto", *SUPPORTED_LANG_CODES], index=0)
 
-    stt_size = st.selectbox("STT model size", ["tiny", "base", "small", "medium"], index=2)
+    # Load models
     stt = load_stt_model(model_size=stt_size)
     embedder = load_embedder()
     tts = load_tts_model()
-
     bank, bank_embs, idx_lookup = embed_intent_bank(embedder)
 
-    st.subheader("Record or Upload Your Query")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("Microphone (click to start/stop):")
-        audio_bytes = audio_recorder(
-            text="Speak",
-            recording_color="#e8b62c",
-            neutral_color="#6aa36f",
-            icon_name="microphone",
-            sample_rate=16000 if realtime_hint else 44100,
-        )
-    with col2:
-        upload = st.file_uploader("Or upload a WAV file", type=["wav"])
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {"role": "assistant", "text": "Hello! Speak or type your question to get started."}
+        ]
+
+    # Render chat history
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["text"])
+            if msg.get("audio"):
+                st.audio(msg["audio"], format="audio/wav")
+
+    # Input: text and microphone
+    user_prompt = st.chat_input("Type your message and press Enter…")
+    audio_bytes = audio_recorder(
+        text="Hold to Talk" if realtime_hint else "Talk",
+        recording_color="#e8b62c",
+        neutral_color="#6aa36f",
+        icon_name="microphone",
+        sample_rate=16000 if realtime_hint else 44100,
+    )
+
+    # Optional upload
+    with st.expander("Upload a WAV instead of speaking"):
+        upload = st.file_uploader("Upload WAV", type=["wav"])
         if upload is not None:
             audio_bytes = upload.read()
 
+    def detect_lang_from_text(text: str, forced: Optional[str]) -> str:
+        if forced and forced in SUPPORTED_LANG_CODES:
+            return forced
+        try:
+            language = lang_detect(text)
+        except Exception:
+            language = DEFAULT_LANGUAGE
+        lang = language[:2].lower() if language else DEFAULT_LANGUAGE
+        letters = sum(ch.isalpha() for ch in text)
+        ascii_letters = sum(("A" <= ch <= "Z") or ("a" <= ch <= "z") for ch in text)
+        if lang != "en" and letters > 0 and ascii_letters / max(letters, 1) > 0.7:
+            lang = "en"
+        if lang not in SUPPORTED_LANG_CODES:
+            lang = DEFAULT_LANGUAGE
+        return lang
+
+    lang_hint = None if forced_lang_choice == "auto" else forced_lang_choice
+
+    # Handle microphone/upload turn
     if audio_bytes:
-        st.audio(audio_bytes, format="audio/wav")
-
-        with st.spinner("Transcribing..."):
-            # Allow user to override language if detection goes wrong
-            forced_lang = st.selectbox("Force language (optional)", ["auto", *SUPPORTED_LANG_CODES], index=0)
-            lang_hint = None if forced_lang == "auto" else forced_lang
+        with st.spinner("Transcribing…"):
             user_text, lang = transcribe_audio(stt, audio_bytes, forced_language=lang_hint)
-        st.write(f"Detected language: {lang}")
-        st.write(f"You said: {user_text}")
-
-        with st.spinner("Understanding intent..."):
+        st.session_state.messages.append({"role": "user", "text": user_text, "audio": audio_bytes})
+        with st.chat_message("user"):
+            st.markdown(user_text)
+            st.audio(audio_bytes, format="audio/wav")
+        with st.spinner("Understanding…"):
             intent = classify_intent(embedder, bank_embs, idx_lookup, user_text, lang)
-        st.write(f"Intent: {intent}")
-
         agent_text = pick_response(intent, lang)
-        st.write(f"Agent: {agent_text}")
+        with st.chat_message("assistant"):
+            st.markdown(f"Detected language: {lang}\n\nIntent: {intent}\n\n{agent_text}")
+            with st.spinner("Synthesizing…"):
+                audio_out, _ = synthesize(tts, agent_text, speaker_wav_path, lang)
+            st.audio(audio_out, format="audio/wav")
+        st.session_state.messages.append({"role": "assistant", "text": agent_text, "audio": audio_out})
 
-        with st.spinner("Synthesizing voice..."):
-            audio_out, _ = synthesize(tts, agent_text, speaker_wav_path, lang)
-        st.audio(audio_out, format="audio/wav")
+    # Handle typed turn
+    elif user_prompt:
+        lang = detect_lang_from_text(user_prompt, lang_hint)
+        st.session_state.messages.append({"role": "user", "text": user_prompt})
+        with st.chat_message("user"):
+            st.markdown(user_prompt)
+        with st.spinner("Understanding…"):
+            intent = classify_intent(embedder, bank_embs, idx_lookup, user_prompt, lang)
+        agent_text = pick_response(intent, lang)
+        with st.chat_message("assistant"):
+            st.markdown(f"Detected language: {lang}\n\nIntent: {intent}\n\n{agent_text}")
+            with st.spinner("Synthesizing…"):
+                audio_out, _ = synthesize(tts, agent_text, speaker_wav_path, lang)
+            st.audio(audio_out, format="audio/wav")
+        st.session_state.messages.append({"role": "assistant", "text": agent_text, "audio": audio_out})
 
     st.markdown("---")
     with st.expander("How to add a new language"):
