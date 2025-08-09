@@ -1,121 +1,160 @@
-AI Voice Cloning for Multilingual Localized Customer Support
+## AI Voice Cloning for Multilingual Localized Customer Support
 
-Overview
-Fully open-source, real-time voice customer support prototype. It transcribes user speech, understands intent in multiple languages, and responds in a cloned, natural-sounding voice. The app runs locally or on Hugging Face Spaces with no paid APIs.
+A production-ready, fully open‑source prototype for voice-based customer support. It transcribes user speech, understands intent across multiple languages, and responds in a cloned, natural-sounding voice. Runs locally or on Hugging Face Spaces without paid APIs.
 
-Highlights
-- Multilingual STT: faster-whisper (CPU-friendly), with optional language override
-- Multilingual NLP: sentence-transformers with language-restricted cosine matching and confidence threshold
-- Voice Cloning TTS: Coqui TTS (XTTS v2 preferred), automatic fallback to YourTTS or Tacotron2
-- Languages: English (en), Hindi (hi), Spanish (es), Tamil (ta), Arabic (ar) by default; easily extendable
-- Streamlit UI: Mic recording or WAV upload; selectable STT model size for accuracy/latency trade-offs
-- Privacy: No cloud calls; all processing local/in-Space
+### Table of Contents
+- [Features](#features)
+- [System Architecture](#system-architecture)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Usage Guide](#usage-guide)
+- [Configuration](#configuration)
+- [Customization](#customization)
+- [Performance & Quality Tips](#performance--quality-tips)
+- [Troubleshooting](#troubleshooting)
+- [Deployment on Hugging Face Spaces](#deployment-on-hugging-face-spaces)
+- [Security & Privacy](#security--privacy)
+- [Roadmap](#roadmap)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
 
-Architecture
-- STT: faster-whisper (CT2 int8) → transcript + language
-- NLP: SentenceTransformer (paraphrase-multilingual-MiniLM-L12-v2) → language-aware intent retrieval with min score threshold
-- NLG: Localized response templates per intent per language
-- TTS: Coqui TTS (XTTS v2) with `speaker_wav` cloning; fallback to YourTTS or Tacotron2 when needed
+## Features
+- **Open-source end-to-end**: No paid APIs; all components are local and open.
+- **Multilingual STT**: faster-whisper (CPU-friendly), with optional language override.
+- **Multilingual understanding**: sentence-transformers with language-aware intent retrieval and confidence thresholding.
+- **Voice cloning TTS**: Coqui TTS (XTTS v2 preferred), with automatic fallback to YourTTS and finally Tacotron2 if needed.
+- **Languages out of the box**: English (en), Hindi (hi), Spanish (es), Tamil (ta), Arabic (ar). Easily extendable.
+- **Modern UI**: Streamlit app with microphone recording or WAV upload and live audio playback.
 
-Repository Layout
-- `app.py`: Streamlit app implementing STT → NLP → TTS pipeline, with robustness features
-- `requirements.txt`: Pinned dependencies for compatibility
-- `harvard.wav`: Sample reference voice (fallback if no upload)
-- `README.md`: This documentation
+## System Architecture
+- **STT**: faster-whisper (CT2 int8) produces transcript + language.
+- **NLP**: SentenceTransformer (paraphrase-multilingual-MiniLM-L12-v2) performs cosine similarity retrieval against language-specific intent examples with a minimum similarity threshold.
+- **NLG**: Localized response templates per intent and language.
+- **TTS**: Coqui TTS (XTTS v2) with `speaker_wav` cloning and `language` selection. If XTTS fails due to environment/version issues, the app transparently falls back to YourTTS or Tacotron2.
 
-Getting Started
-Prerequisites
-- Python 3.9–3.11
-- Windows, macOS, or Linux
-- Optional GPU (CUDA) for faster TTS/STT
+## Requirements
+- **OS**: Windows, macOS, or Linux
+- **Python**: 3.9–3.11
+- **Hardware**: CPU supported; GPU (CUDA) recommended for best latency and quality
 
-Install
-1) Create a virtual environment
-   - Windows (PowerShell):
-     python -m venv .venv
-     .\.venv\Scripts\Activate.ps1
-   - macOS/Linux:
-     python -m venv .venv
-     source .venv/bin/activate
+## Installation
+1) Create and activate a virtual environment
+```powershell
+# Windows (PowerShell)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+```bash
+# macOS/Linux
+python -m venv .venv
+source .venv/bin/activate
+```
 
 2) Install dependencies
-   pip install --upgrade pip
-   pip install -r requirements.txt --no-cache-dir
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt --no-cache-dir
+```
 
-3) Accept Coqui TTS Terms of Service (if prompted)
-   The app sets this automatically, but if needed:
-   - Windows (PowerShell):  $env:COQUI_TOS_AGREED = "1"
-   - macOS/Linux:            export COQUI_TOS_AGREED=1
+3) Accept Coqui TTS Terms of Service (only if prompted)
+The app sets this automatically via `COQUI_TOS_AGREED`, but if you still see a ToS error, set it manually and rerun:
+```powershell
+# Windows (PowerShell)
+$env:COQUI_TOS_AGREED = "1"
+```
+```bash
+# macOS/Linux
+export COQUI_TOS_AGREED=1
+```
 
-Run
+## Quick Start
+```bash
 streamlit run app.py
+```
+Open the URL shown in the terminal (typically `http://localhost:8501`).
 
-Using the App
-1) Reference voice
-   - Upload a clean 5–10s WAV of the desired speaker, or use `harvard.wav`.
-2) Choose STT model size (sidebar)
-   - tiny/base/small/medium. Larger = better accuracy, higher latency.
-3) Record or upload audio
+## Usage Guide
+1) **Reference voice**
+   - Upload a clean 5–10s mono WAV of the desired speaker (or use the included `harvard.wav`).
+2) **STT model size** (sidebar)
+   - `tiny`/`base`/`small`/`medium`. Larger models improve accuracy at the cost of latency.
+3) **Record or upload audio**
    - Use the mic button or upload a WAV query.
-4) Optional: Force language
-   - Set the language selector to enforce STT in a target language (e.g., en).
-5) Review results
-   - The UI shows detected language, transcript, classified intent, and generated reply.
-6) Listen to synthesized response
-   - TTS clones the reference speaker when possible. If XTTS fails on your setup, the app auto-falls back and warns in the UI.
+4) **Force language** (optional)
+   - If auto-detection is unreliable for your content, choose the correct language (`en`, `hi`, `es`, `ta`, `ar`).
+5) **Review results**
+   - The app displays detected language, your transcript, the inferred intent, and the localized agent response.
+6) **Listen to the response**
+   - TTS synthesizes the response in the cloned voice. If XTTS fails, the app falls back automatically and displays a warning.
 
-Customization
-Add new languages
-1) Update `SUPPORTED_LANG_CODES` in `app.py` with ISO-639-1 code (e.g., "fr").
-2) Extend `build_intent_bank()` with example utterances in the new language for each intent.
-3) Add localized responses in `response_templates()`.
+## Configuration
+- **Languages**: The supported languages are defined in `SUPPORTED_LANG_CODES` within `app.py`.
+- **Intent bank**: Example utterances per intent and language are defined in `build_intent_bank()`.
+- **Responses**: Localized response templates per intent are in `response_templates()`.
+- **STT compute**: The app defaults to int8 CPU inference for faster-whisper. You can modify device/compute type in `load_stt_model()` if you have a GPU.
 
-Modify intents/responses
-- Add new intents by introducing keys in `build_intent_bank()` and `response_templates()`.
-- Examples drive retrieval; add several varied phrasings per language.
+## Customization
+### Add a new language
+1) Add the ISO-639-1 code to `SUPPORTED_LANG_CODES` in `app.py`.
+2) Extend `build_intent_bank()` with several example utterances per intent in the new language.
+3) Add localized strings for each intent in `response_templates()`.
 
-Voice Cloning Tips
-- Use a clean, noise-free 5–10s mono WAV.
-- Keep recording conditions consistent for stable cloning.
-- You can swap speakers anytime by uploading a new WAV.
+### Add or modify intents
+- In `build_intent_bank()`, add a new intent key and provide multiple example phrases per supported language.
+- In `response_templates()`, add the localized responses for that intent.
 
-Performance & Quality
-- STT size: Try “medium” for better accuracy; “small” balances speed/quality.
-- Language override: If detection seems wrong, force the intended language.
-- GPU: If available, speeds up TTS/STT significantly.
-- XTTS fallback: If XTTS errors (e.g., GPT2 generate), YourTTS or Tacotron2 is used automatically.
+## Performance & Quality Tips
+- **STT model size**: `medium` offers better accuracy; `small` balances speed and quality on CPU.
+- **Language override**: If English speech is mis-detected, set Force language to `en`.
+- **Voice cloning**: Use a clean, noise-free 5–10s reference WAV. Keep recording conditions consistent.
+- **GPU**: If available, significantly improves XTTS/YourTTS speed and quality.
 
-Troubleshooting
-- Coqui ToS error
-  - Set `COQUI_TOS_AGREED=1` env var as shown above.
-- XTTS load errors / GPT2 generate AttributeError
-  - This repo pins: `TTS==0.21.3`, `transformers==4.41.2`.
-  - Clear model cache and retry:
+## Troubleshooting
+- **Coqui ToS error**
+  - Ensure `COQUI_TOS_AGREED=1` is set (see Installation step 3).
+
+- **XTTS “generate” AttributeError or load issues**
+  - This repo pins: `TTS==0.21.3` and `transformers==4.41.2` for compatibility.
+  - Clear the XTTS model cache and relaunch to re-download weights:
     - Windows: delete `%APPDATA%/tts/tts_models/multilingual/multi-dataset/xtts_v2`
     - macOS/Linux: delete `~/.local/share/tts/tts_models/multilingual/multi-dataset/xtts_v2`
-  - The app falls back to YourTTS then Tacotron2 automatically.
-- Wrong language detected for English
-  - Use the “Force language” selector and try a larger STT model.
-- Clumsy audio
-  - Ensure clean reference WAV, try YourTTS fallback (auto), and consider GPU.
+  - The app will automatically fall back to YourTTS, then Tacotron2, and show a warning in the UI.
 
-Hugging Face Spaces (Streamlit)
-1) Create a new Space
+- **Wrong language detected**
+  - Use “Force language”, try a larger STT model, and ensure your mic audio is clear.
+
+- **Clumsy/garbled audio**
+  - Provide a better-quality reference WAV, reduce background noise, and try GPU if available.
+
+## Deployment on Hugging Face Spaces
+1) Create a Space
    - Type: Streamlit
-   - Hardware: CPU works; GPU recommended
+   - Hardware: CPU works; GPU recommended for better latency
 2) Add files
    - `app.py`, `requirements.txt`, `harvard.wav`, `README.md`
-3) (Optional) Set Space secret or variable
-   - `COQUI_TOS_AGREED=1`
+3) Environment
+   - Add Space secret or variable: `COQUI_TOS_AGREED=1` (if needed)
 4) Deploy
-   - Push to the Space repo; it will auto-build and launch.
+   - Push to the Space repo; it will build and launch automatically.
 
-Model Fine-Tuning (Optional)
-- STT: Fine-tune Whisper via community tools if needed.
-- NLP: Train a small multilingual classifier or fine-tune embeddings with labeled data.
-- TTS: Coqui TTS supports XTTS/YourTTS training; see upstream docs for datasets and training.
+## Security & Privacy
+- All inference runs locally or within your Space; no paid/3rd-party API calls.
+- Do not upload sensitive data to public Spaces or repositories.
+- Review model licenses for any additional obligations.
 
-License
-Open-source components; respect licenses for models and datasets.
+## Roadmap
+- Pluggable LLM-based response generation (in addition to templates)
+- Telephony integration (SIP/WebRTC)
+- Session memory and CRM integration
+- Enhanced real-time streaming with sub-2s end-to-end latency on CPU
 
+## License
+Open-source components only. Respect model and dataset licenses (Coqui TTS, Hugging Face models, etc.).
 
+## Acknowledgments
+- STT: faster-whisper / Whisper
+- NLP: sentence-transformers
+- TTS: Coqui TTS (XTTS v2, YourTTS, Tacotron2)
+
+**Built with ❤️ for automated customer support**
